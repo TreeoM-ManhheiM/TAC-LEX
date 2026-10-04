@@ -1,28 +1,38 @@
 # TACLEX ML - Server Package
 
-**Version:** v1.0.0-alpha
+**Version:** v2.4.0-alpha
 **License:** MIT
-**Engine:** Arma 3 (Real Virtuality 4)
+**Engine:** Arma 3 (Real Virtuality 4) — DayZ and Arma Reforger adapters ready
 
-A technical experiment that integrates Large Language Models (LLMs) into Arma 3 through a lightweight HTTP bridge between SQF and a local backend.
+A multi-game mission generation platform that integrates Large Language Models
+(LLMs) with Arma 3 through a lightweight HTTP bridge between SQF and a local
+backend.
 
-This is a programmer's experiment — not a commercial product. It is not an AI running inside Arma 3. It is a bridge.
+Not an AI running inside Arma 3. A bridge. And since v2.4, a platform.
 
 ## Overview
 
-Every command typed by a player is intercepted by the client addon, sent through a DLL bridge to a local HTTP backend, interpreted by an LLM using native Tool Calling, converted to a structured PIPE command, and executed in the game.
+Every command typed by a player is intercepted by the client addon, sent
+through a DLL bridge to a local HTTP backend, interpreted by an LLM using
+native Tool Calling, converted to a structured PIPE command, and executed
+in the game.
 
-Heavy processing (token generation, JSON validation, name resolution) happens entirely on the backend before reaching the engine. The game receives only a short structured string, similar to a standard admin command.
+Heavy processing (token generation, JSON validation, name resolution) happens
+entirely on the backend before reaching the engine. The game receives only a
+short structured string, similar to a standard admin command.
 
-Architecture:
+Architecture (v2.4):
 
-Chat -> SQF -> DLL -> HTTP -> LLM (Tool Calling) -> Renderer -> PIPE -> SQF
+Chat -> SQF -> DLL -> HTTP -> TACLEX_CORE -> LLM -> ADAPTER -> PIPE -> SQF
+
+Since v2.4, the CORE is 100% game-agnostic. Arma 3 is just one of its adapters.
 
 ## What This Is
 
+- A multi-game mission generation platform (Arma 3 in production, DayZ and
+  Reforger adapters architecturally proven)
 - A programmer's experiment — not a commercial product
-- A demonstration of LLM integration with the Real Virtuality engine
-- An open-source learning project shared with the Arma 3 community
+- An open-source learning project shared with the Bohemia community
 - An alpha release: expect bugs and incomplete features
 
 ## What This Is Not
@@ -31,6 +41,28 @@ Chat -> SQF -> DLL -> HTTP -> LLM (Tool Calling) -> Renderer -> PIPE -> SQF
 - A commercial product
 - A replacement for hand-crafted missions
 - A client-only mod
+
+## Architecture (v2.4)
+
+Since v2.4, the project is split into three independent layers:
+
+    TACLEX_CORE/       game-agnostic engine (11 modules)
+    ADAPTERS/          one per game (arma3, dayz, reforger)
+    CONTENT_PACKS/     JSON data per game (vanilla, RHS, CUP, DayZ)
+    PROMPTS/           LLM prompt per game
+
+The CORE contains zero Arma 3 knowledge. Adding a new game requires only a
+new adapter — no modification to the CORE.
+
+Proof of concept:
+- load_adapter("arma3")     -> custom_mission     (PIPE)
+- load_adapter("dayz")      -> dayz_mission       (PIPE)
+- load_adapter("reforger")  -> reforger_mission   (JSON)
+
+Same mission dict universal. Same execute(). Zero CORE changes.
+
+Note: DayZ and Reforger adapters are architectural proofs. Their in-game
+runtime (Enforce Script) is not yet implemented.
 
 ## Requirements
 
@@ -82,106 +114,114 @@ Groups:
   spawn 4 enemies in front of me
   spawn 10 enemies near my position
 
-Missions — Rescue:
-  rescue John at the port
-  rescue John at the port with 30 enemies
-  resgata a Maria no porto com 30 inimigos
-  rescue the hostage in Zaros
-
 Missions — Kill:
-  kill the officer in Pyrgos
-  kill the enemy commander in Kavala
+  kill the officer at 035049
+  kill the officer at 035049 with ambush
+  kill the officer at 035049, when he dies spawn escape vehicle
+  kill the officer at 035049 with ambush, when half enemies die send wave
+
+Missions — Rescue:
+  rescue John at 035049
+  resgata a Maria no porto
 
 Missions — Destroy:
-  destroy the antenna
-  destroy the radio tower in Kavala
+  destroy the truck at 035049
+  destroy the antenna at 035049
 
 Missions — Defend:
-  defend the base for 5 minutes
+  defend the base at 035049 for 2 minutes
+  defend the base at 035049 for 3 minutes
+
+Missions — Multi-objective:
+  kill the officer at 035049, extract at 040050
+  escort the officer to 040050
+
+Missions — Campaign (2 missions chained):
+  kill the officer at 035049, then defend the base at 040050 for 2 minutes
 
 Languages: English and Portuguese (auto-detected by the LLM).
 
-## In-Game Examples
+## What's New in v2.4
 
-Example 1 — Rescue with 30 enemies
+### Platform Rebuild
+
+- Backend split into 11 game-agnostic CORE modules
+- ADAPTERS layer (arma3, dayz, reforger)
+- Content packs per game
+- Event bus (pub/sub)
+- Rules engine (content-driven triggers)
+- Campaign engine (persistent state)
+
+### Mission System
+
+- Briefing cinemático (on-screen, 12s)
+- Visual log (MISSION COMPLETE / FAILED)
+- Role-based units (1 officer + N guards)
+- Hostage system
+- Defend auto-wave (30s + 60s reinforcements)
+- objective_complete trigger
+- Runner paralelo (multi-task without blocking)
+- 5 triggers: player_near, time_elapsed, unit_dead, percentage_dead,
+  objective_complete
+- 12 mission types
+
+### Campaign Engine
+
+- Persistent campaign state (campaign_state.json)
+- Progressão M1 -> M2 -> M3
+- split N missões
+- Event-driven mission completion
+- State variables between missions
+
+### Content System
+
+- Full RHS/CUP support (232 classnames)
+- Context-aware classes (player side -> enemy classes)
+- RHS MSV (player WEST -> enemy EAST)
+- RHS USAF (player EAST -> enemy WEST)
+- Vanilla fallback
+
+### Dataset
+
+- Event sourcing in Documents\Arma 3\TACLEX_dataset\
+- missions.jsonl + results.jsonl
+- Result queue (no more overwrite)
+
+### Dev Tools
+
+- build.ps1 (single command, 67s)
+- core_test.py (8/8 decoupling tests)
+- campaign_test.py (10/10 campaign tests)
+
+## In-Game Example — Campaign
 
 Player types in the TACLEX console (Insert key):
 
-  rescue John at the port with 30 enemies
-
-Backend log:
-
-  >> [V2] tool=custom_mission args={
-       'mission_name': 'Rescue John at Port',
-       'briefing': 'The team must infiltrate the harbor, locate
-                    the hostage John, and extract him safely.',
-       'objectives': [
-         {'type': 'move',    'value': 'reach the port'},
-         {'type': 'rescue',  'value': 'John'},
-         {'type': 'extract', 'value': 'John to safe zone'}
-       ]
-     }
-  >> resposta: OK|custom_mission|Rescue John at Port|...|move:reach the port;rescue:John;extract:John to safe zone
+  kill the officer at 035049, then defend the base at 040050 for 1 minute
 
 In-game result:
-  - 1 task with 3 subtasks appears on the map
-  - 30 enemy soldiers spawn at a safe position ~400m away
-  - 1 hostage (civilian) spawns at the target location
-  - A red marker marks the objective area
-  - Mission only completes when all objectives are met
 
-Example 2 — Assassinate an officer
+  Mission 1: "Officer Elimination"
+    - Task + red marker at 035049
+    - 5 enemy soldiers (RHS or vanilla, depending on pack)
+    - Task completes when officer dies
 
-Player types:
+  8 seconds pause
 
-  kill the officer in Pyrgos
+  Mission 2: "Base Defense" (auto-spawned)
+    - Task + red marker at 040050
+    - Wave 1 (30s): 4 reinforcements
+    - Wave 2 (60s): 4 reinforcements
+    - Task completes after timer
 
-In-game result:
-  - Task appears: "Eliminate Officer in Pyrgos"
-  - 5 enemy soldiers spawn at ~400m
-  - Red marker on the map
-  - Task completes when all 5 enemies are eliminated
-
-Example 3 — Destroy a target
-
-Player types:
-
-  destroy the antenna
-
-In-game result:
-  - Task appears: "Antenna Demolition"
-  - 5 enemy soldiers spawn at the target area
-  - Red marker + flag object at the location
-  - Task completes when all enemies are eliminated
-
-Example 4 — Defend for 5 minutes
-
-Player types:
-
-  defend the base for 5 minutes
-
-In-game result:
-  - Task appears: "Base Defense"
-  - Timer counts down from 60 seconds
-  - Task completes automatically after the timer expires
-
-## Architecture
-
-Chat -> SQF -> DLL -> HTTP -> LLM -> Renderer -> PIPE -> SQF -> Game
-
-Components:
-- SQF: chat interception, dispatch
-- DLL: HTTP bridge (Go)
-- Backend: LLM orchestration (Python)
-- Renderer: PIPE formatting
-- LLM: remote natural language interpretation
+  Both missions share the same content pack classes.
 
 ## Supported Providers
 
-- Groq (recommended, free, 14,400 req/day)
+- Groq (recommended, free)
 - OpenAI (paid)
-- Gemini (20 req/day free)
-- OpenRouter (50 req/day free)
+- Gemini (free tier limited)
+- OpenRouter (free tier limited)
 - DeepSeek (paid, cheap)
 
 All support native Tool Calling.
@@ -196,6 +236,8 @@ taclax.env:
   LLM_ACTIVE_KEY=1
   LLM_API_KEY_1=your_key_here
   TACLEX_ADMIN_ONLY=false
+  TACLEX_CONTENT_PACK=arma3_vanilla
+  TACLEX_PROMPT_PACK=arma3_vanilla
 
 taclax_admins.txt:
   one SteamID64 per line
@@ -208,34 +250,48 @@ taclax_admin_only.txt:
 - Backend won't start: run as Administrator, check port 8000
 - Commands return unknown: check API key
 - Vehicle doesn't spawn: if RHS/CUP, ensure mod is loaded
-- Mission completes immediately: update to v1.0.0-alpha or newer
+- Classes are vanilla instead of RHS: check TACLEX_CONTENT_PACK in .env
 - context deadline exceeded: provider too slow, switch to a faster model
 
 ## Known Limitations
 
 - Alpha release, expect bugs
-- RHS and CUP vehicles require their mods to be loaded
-- Mission quality depends on LLM output and may vary
-- No client-only installation mode
+- DayZ and Reforger adapters are architectural proofs only
+  (no runtime implemented yet)
+- Arma 2 planned but not started
+- Campaign state is global (not per-player yet)
+- LLM provider: Groq only for now (fallback in roadmap)
+- Onboarding requires manual .env setup
 - Free LLM tiers have daily request limits
 
 ## Roadmap
 
 - [x] Tool Calling integration
 - [x] 232 vehicle enum
-- [x] Custom missions (kill, rescue, destroy, defend)
-- [ ] Additional mission types
-- [ ] isClass validation for missing mods
-- [ ] In-game admin panel
+- [x] 12 mission types
+- [x] Runner paralelo (multi-task)
+- [x] Campaign engine (2+ missions)
+- [x] Briefing + log visual
+- [x] CORE agnostic + ADAPTERS
+- [x] Multi-game proof (arma3 + dayz + reforger)
+- [ ] Full 12 objectives in-game test
+- [ ] Steam Workshop release
+- [ ] API key onboarding wizard
+- [ ] Fallback provider (Groq -> DeepSeek)
+- [ ] DayZ runtime (Enforce Script)
+- [ ] Reforger runtime (Enfusion)
 
 ## License
 
-MIT License. Free to use, modify, distribute and sublicense. Attribution required.
+MIT License. Free to use, modify, distribute and sublicense.
+Attribution required.
 
 ## Disclaimer
 
-TACLEX ML is an educational and experimental project. It is not sold, licensed, or monetized.
+TACLEX ML is an educational and experimental project. It is not sold,
+licensed, or monetized.
 
-Use at your own risk. The author is not responsible for any in-game behavior generated by LLM output.
+Use at your own risk. The author is not responsible for any in-game behavior
+generated by LLM output.
 
-This is not an AI. It is a bridge.
+This is not an AI. It is a bridge. And since v2.4, a platform.
